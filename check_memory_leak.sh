@@ -1,39 +1,40 @@
 #!/bin/bash
 
-echo "Checking memory.."
-while true
-do
-        ps=`ps -e | awk '{print $1}'`
-        pss=($(echo $ps | tr "\n" " "))
-        vd=("PID")
+# 로그 레벨 설정 (DEBUG, INFO, WARNING, ERROR)
+log_level="INFO"
 
-        for ((i=1;i<=${#pss[@]};i++))
-        do
-                if [ -e /proc/${pss[$i]}/status ]
-                then
-                        temp=`cat /proc/${pss[$i]}/status | grep VmData`
-                        if [[ "$temp" == *ata*kB* ]]
-                        then
-                                vd+=(${pss[$i]} "$temp")
-                        fi
-                fi
-        done
-        sleep 30
-        for ((i=1;i<${#vd[@]};i+=2))
-        do
-                pid=${vd[$i]}
-                if [ -e /proc/$pid/status ]
-                then
-                        idx=`expr $i + 1`
-                        mem=($(echo ${vd[$idx]} | tr " " " "))
-                        cur_mem=($(echo `cat /proc/$pid/status | grep VmData` | tr " " " "))
+# 출력 파일 설정
+log_file="memory_leak.log"
 
-                        if [ "${cur_mem[1]}" -gt "${mem[1]}" ]
-                        then
-                                pname=`cat /proc/$pid/status | grep Name`
-                                echo -e "PID:$pid \t $pname"
-                                echo -e "MEM: ${mem[1]} \t > \t ${cur_mem[1]}kB"
-                        fi
+# 감지 주기 설정 (초)
+detection_interval=30
+
+log() {
+    # 로그 레벨에 따라 로그 출력
+    local level="$1"
+    local message="$2"
+    if [ "$log_level" == "DEBUG" ] || [ "$log_level" == "$level" ]; then
+        echo "[$level] $(date +"%Y-%m-%d %H:%M:%S"): $message" >> "$log_file"
+    fi
+}
+
+log "INFO" "Memory leak detection script started."
+
+while true; do
+    log "INFO" "Checking memory..."
+    pids=($(ps -e -o pid=))
+    for pid in "${pids[@]}"; do
+        if [ -e /proc/"$pid"/status ]; then
+            name=$(cat /proc/"$pid"/status | grep Name)
+            if [[ "$name" == *Name* ]]; then
+                cur_mem=($(cat /proc/"$pid"/status | grep VmData | tr -s ' '))
+                if [ "${cur_mem[1]}" -gt 0 ]; then
+                    log "INFO" "Checking PID: $pid ($name)"
+                    log "INFO" "Current Memory Usage: ${cur_mem[1]} kB"
+                    # 여기에서 메모리 누수 여부를 확인하고 조치를 취할 수 있습니다.
                 fi
-        done
+            fi
+        fi
+    done
+    sleep "$detection_interval"
 done
